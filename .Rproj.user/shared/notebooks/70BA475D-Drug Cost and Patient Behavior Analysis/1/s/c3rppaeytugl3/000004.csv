@@ -1,5 +1,0 @@
-"0","inTrain65 <- createDataPartition(data$Class, p = 0.90, list = FALSE)
-"
-"2","Error in createDataPartition(data$Class, p = 0.9, list = FALSE) : 
-  y must have at least 2 data points
-"

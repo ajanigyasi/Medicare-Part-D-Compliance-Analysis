@@ -1,4 +1,0 @@
-"0","tester <- cbind(testData, predict(m, testData, type = ""probs""))
-"
-"2","contrasts dropped from factor exerAny"
-"2","contrasts dropped from factor drLowSalt"
