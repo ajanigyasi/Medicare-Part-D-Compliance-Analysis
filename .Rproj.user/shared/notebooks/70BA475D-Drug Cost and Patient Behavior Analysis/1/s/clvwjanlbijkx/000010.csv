@@ -1,0 +1,3 @@
+"0","m <- polr(formula = bmiClass ~ exerAny + drLowSalt + drVisitDiab, data = trainingData, Hess = TRUE)
+"
+"2","design appears to be rank-deficient, so dropping some coefs"

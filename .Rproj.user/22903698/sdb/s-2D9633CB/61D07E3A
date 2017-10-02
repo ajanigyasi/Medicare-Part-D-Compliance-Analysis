@@ -1,0 +1,21 @@
+{
+    "collab_server" : "",
+    "contents" : "#########################################################Attach imputations for missing data\nlibrary(plyr)\nt <- dat65\nt <- t[,-c(1)]\n\n\ncolnames(t) <- c(\"drVisitDiab\", \"drLowSalt\", \"exerAny\", \"bmiClass\", \"exerActType\", \"race\", \"sex\")\n#Change yes and no levels\nlevels(t$exerAny) <- c(1,0)\nlevels(t$drLowSalt) <- c(1,0)\n#Reorder levels & remove age column\nt$bmiClass <- factor(t$bmiClass, levels(t$bmiClass)[c(8,6,7,1,5,2:4)])\n\nt <- subset(t, !is.na(drVisitDiab))\nlevels(t$drVisitDiab)[c(43,45,47)] <- c(NA, 0, NA) # per BRFSS Codebook\n\n#NA's\n#race 335 \n#exerAny 1233\n#drLowSalt 13,885\n#drVisitDiab 769\n\n# Convert drVisistDiab to numeric safely\nt$drVisitDiab <- as.numeric(levels(t$drVisitDiab))[t$drVisitDiab]\n\nlibrary(mice) # To impute exerAny, drLowSalt, & race\nimp <- mice( t[,c(2:3, 6)] , seed = 123)\ncomp <- complete(imp)\n\nt <- with(t, cbind(drVisitDiab,  comp, sex, bmiClass, exerActType))\n\naverage_wt <- ddply(t, c('race', 'sex', 'bmiClass'), function (x) c(drVisitDiab = round(mean(x$drVisitDiab, na.rm = TRUE))))\n\n#Impute function\nimpute <- function (drVisitDiab, race, sex , bmiClass) {\n  fill <- NA\n  if (!is.na(drVisitDiab)) {\n    fill <- c(drVisitDiab)\n  }\n  else {\n    fill <- average_wt[average_wt$race == race & average_wt$sex == sex & average_wt$bmiClass == bmiClass, \"drVisitDiab\"]\n  }\n}\n\n# To impute drVisitDiab using averages based on race, sex, and bmiClass\nt$drVisitDiab <- with(t, mapply(impute, drVisitDiab, race, sex, bmiClass ))\n\ndataHealth <- t\n\nwrite.csv(dataHealth, file = \"dataHealth.csv\")\n",
+    "created" : 1506903676062.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2765184193",
+    "id" : "61D07E3A",
+    "lastKnownWriteTime" : 1506905574,
+    "last_content_update" : 1506905574951,
+    "path" : "E:/CDC/Medicare Part D Compliance Analysis/imputeDrVisits.R",
+    "project_path" : "imputeDrVisits.R",
+    "properties" : {
+        "tempName" : "Untitled1"
+    },
+    "relative_order" : 7,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_source"
+}

@@ -1,0 +1,20 @@
+{
+    "collab_server" : "",
+    "contents" : "### Medicare Part D Compliance Analysis\n\n##### Data Sources\n * [2015 Medicare Part D Data](https://www.cms.gov/Research-Statistics-Data-and-Systems/Statistics-Trends-and-Reports/Information-on-Prescription-Drugs/2015MedicareData.html)\n * [2015 CDC BRFSS Data](https://www.cdc.gov/brfss/annual_data/annual_2015.html)\n\n*Presentation*: (http://rpubs.com/ajanigyasi/partD)\n",
+    "created" : 1506907002958.000,
+    "dirty" : false,
+    "encoding" : "UTF-8",
+    "folds" : "",
+    "hash" : "2800896141",
+    "id" : "613A21D3",
+    "lastKnownWriteTime" : 1506907577,
+    "last_content_update" : 1506907578032,
+    "path" : "E:/CDC/Medicare Part D Compliance Analysis/README.md",
+    "project_path" : "README.md",
+    "properties" : {
+    },
+    "relative_order" : 8,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "markdown"
+}

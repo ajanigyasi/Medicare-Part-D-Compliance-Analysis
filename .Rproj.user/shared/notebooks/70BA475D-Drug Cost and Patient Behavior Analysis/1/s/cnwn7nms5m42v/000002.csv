@@ -1,0 +1,5 @@
+"0","dataHealth <- read.csv(""dataHealth.csv"", colClasses = c(drVisitDiab = """", drLowSalt = ""factor"", exerAny = ""factor"", race = """", sex = """",  bmiClass = ""factor"", exerActType = """" ))
+"
+"2","Error in .getClassesFromCache(Class) : 
+  attempt to use zero-length variable name
+"

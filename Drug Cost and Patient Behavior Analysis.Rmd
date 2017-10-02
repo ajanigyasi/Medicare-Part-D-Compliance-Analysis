@@ -1,0 +1,284 @@
+---
+title: "Medicare Part D Compliance Analysis"
+author: "Ajani Gyasi"
+date: "September 30, 2017"
+output: html_document
+
+
+
+
+
+
+
+
+
+
+---
+
+Current health care systems face many day to day challenges balancing between patient, doctor, and multiple third party entities. Cost and quality are two of the broader challenges that provide some insight into how well a particular health care system functions. Moreover, when patients think of health care, the main groups that come to mind are insurance, pharmacy, and provider. All three groups have patient-focused strategies structured from data-driven approaches that ultimately result in unsatisfactory health care outcomes due to its level of complexity. As a reflection of current health care cost, we can show a panorama view of drug spending through the lens of the popular Medicare Part D program. Later in the analysis, we outline a patient need for distinguished data-driven approaches that range from motivated behavioral change to optimal health outcomes. 
+
+
+
+
+#### Prepocessing 
+Check out [Dario's Github Jupyter Notebook](https://github.com/dariodata/medicare-drug-cost/blob/master/data_preparation.ipynb) for the initial preprocessing (fuzzy matching algorithm) steps taken to write the data source used in this analysis. Medicare Part D drug cost (2011 - 2015) data collected from the Center of Medicare and Medicaid Services displays consecutive drug cost trajectories. 
+```{r, echo=TRUE, message=FALSE}
+library(RCurl)
+
+drugData <- read.csv(text = getURL("https://raw.githubusercontent.com/dariodata/medicare-drug-cost/master/data/medicare_data_disease.csv"))
+```
+
+
+#### Summarizing Indication and Drug Spending
+
+To follow drug spending, `dplyr` library gives a sum total of spending and `ggplot` library plots top 10 most spent drugs in 2011-2015. The same approach is done for 2015 top 100 indication spending with the inclusion of claim and beneficiary count. Notice, how there are a few diabetic medications that made the top 10 list at an increasing rate in each consecutive year. Also in 2015, diabetes mellitus was the most expensive indication that affects a large number beneficiaries. 
+```{r, echo= TRUE, message=FALSE} 
+library(dplyr)
+library(ggplot2)
+
+data <- drugData[drugData$Year == 2015,]
+
+#Drug Spending
+drugSpend_2015 <- data %>%
+  group_by(Brand.Name) %>%
+  summarize(Total.Spending = sum(Total.Spending, na.rm = TRUE)) %>%
+  arrange(desc(Total.Spending))
+
+#Indication Spending
+spend_2015 <- data %>%
+  group_by(Indication) %>%
+  summarize(Total.Spending = sum(Total.Spending, na.rm = TRUE), 
+            Claim.Count = sum(Claim.Count, na.rm = TRUE), 
+            Beneficiary.Count = sum(Beneficiary.Count, na.rm = TRUE)) %>%
+  mutate(Claim.Count = Claim.Count/10000) %>%
+  arrange(desc(Total.Spending, Claim.Count, Beneficiary.Count))
+
+#Subset Top 10 Drugs 2011-2015
+top_10_spend <- drugSpend_2015[1:10,]
+drugSpendOrder <- drugData[order(drugData$Total.Spending, decreasing = TRUE),]
+annual10 <- subset(drugSpendOrder, Brand.Name %in% top_10_spend$Brand.Name)
+                   
+#Subset Top 100 Indications in 2015 via Total Spending
+top_100 <- spend_2015[1:100,]
+head(top_100)
+
+                  
+```
+
+```{r, echo=TRUE, warning=FALSE}
+#Drug Spending Plot
+ggplot(data = annual10, aes(x = Year, y = Total.Spending, color = Brand.Name)) +
+  geom_point() + geom_line() + scale_y_continuous(breaks = seq(0, 8e9, 1e9), limits = c(0, 8e9)) +
+  ggtitle("Annual spending for top 10 drugs 2011-2015")
+```
+
+```{r , echo=TRUE}
+#Indication Spending Plot
+qplot(Beneficiary.Count, Total.Spending, data = top_100, geom = "point", size = Claim.Count, color = Indication) + theme(legend.position = "none") + geom_text(aes(label=Indication), hjust=0, vjust=0) +
+  scale_x_continuous(breaks = seq(0, 3.3e7, 0.5e7), limits = c(0, 3.3e7)) +
+  scale_y_continuous(breaks = seq(0, 2e10, 0.5e10), limits = c(0, 2e10)) + 
+  ggtitle("Top 100 Medicare Part D Indications in 2015")
+
+```
+
+
+
+
+
+
+
+
+### Ordered Logistic Regression (OLR) Analysis
+We can look at likely Medicare Part D diabetics who may have contributed to the total spending shown above. The Center for Disease Control and Prevention or CDC reports behavioral risk factors such as smoking, obesity, physical inactivity, high blood pressure, high cholesterol, and high blood glucose for complications among adults with diagnosed diabetes. The CDC’s 2015 Behavioral Risk Factor Surveillance System or brfss dataset collects 441,456 records of information about individual’s characteristics, health, wellness, and nutrition. The brfss dataset has modules’ of questions that are quite similar to those an actual diabetic patient would hear in an eye exam setting. For instance:
+
+  1. How long have you been diabetic for? 
+  2. Are you currently taking insulin? 
+  3. How often do you monitor your blood glucose? 
+    + If often, what was your fasting blood glucose today? 
+  4. Are you compliant with your medication? 
+  5. When was the last time you went to visit your primary care physician? 
+  6. Do you know what an A1c is? 
+    + If so, what was your last HgA1c? 
+  7. What have you been doing to improve your lifestyle? Exercise and diet? 
+  8. What types of food do you eat on a daily basis? 
+  9. What type of exercise and what amount do you do weekly? 
+  10. Does anyone in your family have any medical conditions like high blood pressure, thyroid issues, diabetes?  
+              
+
+
+
+
+#### Data Description
+The brfss survey responses used consisted of annual diabetes related doctor visits (missing values are imputed with an average). In addition to binary responses (yes or no) to doctor advice to lower salt intake (i.e. diabetic may have high blood pressure if yes) and whether a diabetic exercises. The `dataHealth` dataset is comprised of 65 or older diabetics (subsetted from `brfss`) labeled with their respective body mass index level, `bmiClass`, calculated from their height (m) and weight (kg).
+$$ bmi = \frac{kilograms}{meters^2}$$
+
+
+```{r, echo=TRUE}
+dataHealth <- read.csv("dataHealth.csv", colClasses = c(drVisitDiab = "integer", drLowSalt = "factor", exerAny = "factor", race = "factor", sex = "factor",  bmiClass = "factor", exerActType = "factor" ))
+dataHealth$bmiClass <- factor(dataHealth$bmiClass, levels(dataHealth$bmiClass)[c(8,6,7,1,5,2:4)]) # Reorder levels
+head(dataHealth)
+```
+Shown below, is a three way cross tabs dubbed `xtabs` and a flatten table of response frequency in each `bmiClass`.
+```{r, echo=TRUE}
+ftable(xtabs(~ exerAny + bmiClass + drLowSalt , data = dataHealth))
+```
+
+Active exercise cloud visualization of  shows the size of the exercise type, which is proportional to how many partake in a given exercise. This gives an inside look at the types of exercise or activities diabetics favor to stay active. Overall, these three `bmiClass` agree on the same top 5 exercises (e.g. walking, gardening, bicycle machine, and other; where 2,376 diabetics who are considered as `overweight` prefer walking to stay active) except for aerobics, golfing with a cart, and yard work. Only 38, 78, and 58 diabetics claim these 5th place workouts as their primary exercise of choice, respectively.
+
+
+```{r out.width = "900px", out.height="200px",  echo=FALSE}
+library(knitr)
+include_graphics("./threeActives.png")
+
+```
+
+
+
+
+
+
+There are a few R packages used for OLR probabilities testing. The `caret` package will partition our dataset 60/40 (for data variation purposes). The `polr` function from the `MASS` package will estimate an OLR model. The `bmiClass` variable will be the outcome variable in the training dataset. 
+```{r , echo=TRUE, message=FALSE}
+library(foreign)
+library(MASS)
+library(Hmisc)
+library(caret)
+
+set.seed(23)
+inTrain65 <- createDataPartition(dataHealth$bmiClass, p = 0.60, list = FALSE)
+
+trainingData <- dataHealth[inTrain65,]
+testData <- dataHealth[-inTrain65,] 
+```
+
+#### Polr results
+The `polr` function will estimate an OLR model. `Hess=TRUE` is specified to return observed information matrix used to get standard errors. 
+
+```{r , echo=TRUE}
+#Ordered logistic regression (odds ratios)
+m <- polr(formula = bmiClass ~ exerAny + drLowSalt + drVisitDiab, data = trainingData, Hess = TRUE)
+
+
+ctable <- coef(summary(m))
+p <- pnorm(abs(ctable[, "t value"]), lower.tail = FALSE) * 2
+(ctable <- cbind(ctable, "p value" = p))
+
+```
+
+Profiled confidence intervals determine whether a  predictor is significant at each `bmiClass` level. A rule for 95% confidence intervals is if it does not cross zero, the parameter is statistically significant. For example, `drVisitDiab` does not include zero, `exerAny` and `drLowSalt` does. The estimates in the summary output are given in units of ordered logits, or ordered log odds. So, for every one unit increase in `drVisitDiab`, we expect a 0.017 increase in the expected value of `bmiClass` on the log odds scale, given all of the other variables in the model are held constant. 
+
+```{r , echo=TRUE, message=FALSE}
+#Using standard error by assumming normality with confidence intervals 
+(ci <- confint(m))
+
+```
+
+Proportional odds ratios are converted coefficients or estimates from our summary into odds ratios. This is another way to interpret logistic regression models. To get the odd ratios (OR) and confidence intervals, both confidence intervals and estimates are exponential. So, for `exerAny` we would say for a one unit increase in whether a diabetic exercises (i.e. going from 0 to 1), the odds of it being identified as a `obese class III` diabetic versus a `obese class II` or a `obese Class I` diabetic combined are 0.66 greater, given all the other variables in the model are held constant. Similarly, the odds of a `obese class III` or a `obese class II` diabetic exercising versus `obese class I` diabetic exercising is 0.66 greater, given all the other variables in the model are held constant. For `drVisitDiab`, when a diabetic increases their annual doctor's visits  by one day or moves 1 unit concerning their condition, the odds of it being classified as  `obese class I` diabetic to `obese class II` or `obese class III` diabetic are multiplied by 1.02.
+
+
+
+
+
+
+```{r , echo=TRUE}
+#Proportional odds ratios & confidence intervals 
+exp(cbind(OR = coef(m), ci))
+```
+
+####Test the Proportional Odds Assumption
+Ordinal logistic regression assumes that the coefficients that describe each pair of outcome groups is the same. To assess the appropriateness of the model, we have to evaluate whether the proportional odds assumption is tenable. Below, is a function that calculates the log odds of greater than or equal to each value of `bmiClass`. Notice, inside the `sf` function there lies the `qlogis` function that transforms a probability to a logit. 
+
+
+
+```{r , echo=TRUE}
+sf <- function(y) {
+  c('Y>=1' = qlogis(mean(y >= 1)),
+    'Y>=2' = qlogis(mean(y >= 2)),
+    'Y>=3' = qlogis(mean(y >= 3)),
+    'Y>=4' = qlogis(mean(y >= 4)),
+    'Y>=5' = qlogis(mean(y >= 5)),
+    'Y>=6' = qlogis(mean(y >= 6)),
+    'Y>=7' = qlogis(mean(y >= 7)),
+    'Y>=8' = qlogis(mean(y >= 8)))
+}
+
+
+
+(s <- with(trainingData, summary(as.numeric(bmiClass) ~ exerAny + drLowSalt + drVisitDiab, fun = sf)))
+
+```
+
+Here we evaluate the parallel slopes assumption by running a series of binary logistic regressions with varying cutpoints on our dependent variable `bmiClass`  and check the equality of coefficients across cutpoints. The first line of code estimates the effect of `drLowSalt` on choosing a `normal` weight diabetic being advised to lower salt versus `overweight` or `obese class I` diabetic. The second line of code estimates the effect of `drLowSalt` on choosing a `normal` weight or `overweight` diabetic being advised to lower salt versus `obese class I` diabetic.
+```{r , echo=TRUE}
+
+glm(I(as.numeric(bmiClass) >= 5) ~ drLowSalt, family="binomial", data = trainingData)
+glm(I(as.numeric(bmiClass) >= 6) ~ drLowSalt, family="binomial", data = trainingData)
+```
+
+
+The plot below will help decide if the proportional odds assumption holds. For each predictor variable, the distance between the symbols for each set categories in `bmiClass` should remain similar. 
+```{r, echo=TRUE}
+#Normalize all the first set of coefficients to be zero for commom reference point in plot
+s[,9] <- s[,9] - s[,8]
+s[,3:8] <- s[,3:8] - s[,3:8]
+plot(s, which=1:8, pch=1:8, xlab='logit', main="Does the POA hold?", xlim=range(s[,8:9]))
+
+
+```
+
+It looks like the proportional odds assumption holds for two predictors `drLowSalt` and `drVisisDiab` in the 3 & 4 annual doctor visits range. 
+
+```{r, echo=TRUE}
+library(reshape2)
+testData <- testData[,-c(1,5:8)]
+tester <- cbind(testData, predict(m, testData, type = "probs"))
+longCv <- melt(tester, id.vars = c("drVisitDiab", "drLowSalt", "exerAny"),
+                variable.name = "bmiClass", value.name="Probability")
+
+```
+
+#### Predicted Probabilities for Exercise, Salt Intake, and Diabetic Dr. Visits
+```{r , echo=FALSE}
+qplot(x = drVisitDiab, y = Probability, data = longCv, colour = bmiClass) +
+  geom_line() + facet_grid(drLowSalt ~ exerAny, labeller="label_both")
+```
+
+#### Verify the probabilites
+
+```{r, echo=TRUE}
+pHat <- predict(m, type = "probs") # probabilities of the model or fit
+categoryHat <- levels(trainingData$bmiClass)[max.col(pHat)] # bmiClass with the highest probability  
+factorHat <- predict(m, type = "class") # predicted bmiClass
+all.equal(factor(categoryHat), factorHat, check.attributes = FALSE) # manual verfication
+
+
+```
+
+
+   
+#### Conclusion and Limitations
+In the new dataset, the fitted model learned that diabetics who visit their physician the least (no annual visits or 1 annual visit) concerning their condition identified as `overweight`. It also shows `overweight` diabetics being highly  probable to visit their physician at least 2 to 4 times a year compared other `bmiClass` levels, which are the minority groups. According to the American Diabetes Association, these same `overweight` diabetics are within the range of compliance for annual physician visits whether diagnosed as a Type I or Type II diabetic. 
+
+There are number of the limitations in this analysis. First, the `bmiClass` calculation does not take into account muscle mass, body fat, water weight, and other factors to determine appropriate weight classifications. Another limitation is the conducted survey itself, which may be fabricated when repsondents are either embarrassed about their lack of effort and control or sensitive about the subject when discussing their condition management. This is also an on-going issue when a patient is consulting with their physician and may express an alternative lifestyle that does not match their A1C levels or eye exam results. There are many foregoing experiments  with several research teams in obtaining the ground truth of patient's behavior and visualizing outcomes (in a first-person viewpoint -- like looking into a mirror) based on previous health choices made. Overall, this analysis ran through the 2015 drug cost per indication and explored the impact patient behavior has on developing high-cost diseases like diabetes.
+
+
+         
+
+
+
+
+
+
+####Next Steps
+
+ Prior research [Boyle CM. 1970] points out medical consultations frequently overestimate patient knowledge of their anatomy and it’s functions.  More recently, a  study [Weinman J. et. al 2009] performed the same test for diagnosed diabetic patients and found that they  were more accurate in locating affected organ significantly better than the general population; This also holds true for liver disease patients as well. 
+
+Per this analysis, patient education extends further than just affected organ location among the diagnosed. What actions will a patient take after their doctor’s visit? Are medical providers confident the responses to their health compliance questions is the actual ground truth? What more can be done to simultaneously enhance  knowledge and motivate people about their health status? [Levethal H. 1980 Common Sense Model ] 
+
+
+
+
+
+
+
+
