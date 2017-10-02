@@ -144,4 +144,4 @@ brfss$sex <- factor(brfss$sex, levels = c(1,2), labels = c('male', 'female')) #s
 
 dat <- as.data.frame(with(brfss, cbind(x.age65yr, doctdiab, dradvise ,exerany2, Class)))
 dat <- cbind(dat, brfss$exract11, brfss$x.race, brfss$sex)
-dat65 <- subset(dat, x.age65yr == 2)
+dat65 <- subset(dat, x.age65yr == 2) # subset 65 years and older 

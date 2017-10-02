@@ -1,4 +1,5 @@
 #########################################################Attach imputations for missing data
+source("weightWatchers.R")
 library(plyr)
 t <- dat65
 t <- t[,-c(1)]
